@@ -32,6 +32,7 @@ members = [
 
   "contracts/extension",
   "contracts/multisig",
+  "p2p"
 ]
 
 # Always compile Monero (and a variety of dependencies) with optimizations due
