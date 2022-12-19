@@ -7008,13 +7008,19 @@ name = "p2p"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "dalek-ff-group",
  "futures",
+ "group",
+ "hex",
  "libp2p 0.41.2",
  "log",
  "message-box",
  "pretty_env_logger",
+ "rdkafka",
  "serde",
  "tokio 1.23.0",
+ "zalloc",
+ "zeroize",
 ]
 
 [[package]]

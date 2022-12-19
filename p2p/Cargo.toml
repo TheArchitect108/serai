@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 #TODO Filter deps down using feature flags
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.21.2", features = ["full"] }
 libp2p = "0.41.0"
 serde = { version = "1.0.131", features = ["derive"] }
 bincode = "1.3.3"
@@ -17,3 +17,9 @@ pretty_env_logger = "0.4"
 
 futures = "0.3.18"
 message-box = { path = "../common/message-box" }
+dalek-ff-group = { path = "../crypto/dalek-ff-group" }
+hex = "0.4"
+group = "0.12"
+zeroize = { version = "1.5", features = ["zeroize_derive"] }
+zalloc = { path = "../common/zalloc" }
+rdkafka = "0.28.0"
