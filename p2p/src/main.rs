@@ -16,12 +16,16 @@ use libp2p::{
 };
 use log::{error, info};
 use state::{Message, MessageType, State};
-use std::{collections::HashMap, process};
-use tokio::{io::AsyncBufReadExt, sync::mpsc, signal::ctrl_c};
+use std::{collections::HashMap, process, time::Duration};
+use tokio::{sync::mpsc, signal::ctrl_c};
 
 use std::env;
 
-/// Transmit a response to other peers utilising the channels
+// Pass in service_id with Args
+// cargo run -- service_id Coordinator
+// cargo run -- service_id BTC
+
+/// Transmit a response to other peers utilizing the channels
 fn send_response(message: Message, sender: mpsc::UnboundedSender<Message>) {
   tokio::spawn(async move {
     if let Err(e) = sender.send(message) {
@@ -81,6 +85,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for Chat {
       FloodsubEvent::Message(raw_data) => {
         //Parse the message as bytes
         let deser = bincode::deserialize::<Message>(&raw_data.data);
+        //dbg!(&deser);
         if let Ok(message) = deser {
           if let Some(user) = &message.addressee {
             if *user != self.peer_id.to_string() {
@@ -90,6 +95,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for Chat {
 
           match message.message_type {
             MessageType::Message => {
+              info!("Message recieved!");
               let username: String = self.state.get_username(&raw_data.source.to_string());
               println!("{}: {}", username, String::from_utf8_lossy(&message.data));
 
@@ -99,6 +105,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for Chat {
             MessageType::State => {
               info!("History recieved!");
               let data: State = bincode::deserialize(&message.data).unwrap();
+              //dbg!(&data);
               self.state.merge(data);
             }
           }
@@ -131,11 +138,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   pretty_env_logger::init();
 
   let mut args: Vec<String> = env::args().collect();
-  let component_arg = args.pop().unwrap();
-  println!("{}", &component_arg);
+  let service_id = args.pop().unwrap();
 
   let id_keys = identity::Keypair::generate_ed25519();
   let peer_id = PeerId::from(id_keys.public());
+
+  println!("{}: {}", &service_id, &peer_id);
 
   let auth_keys = Keypair::<X25519Spec>::new()
     .into_authentic(&id_keys)
@@ -150,14 +158,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   //Generate channel
   let (response_sender, mut response_rcv) = mpsc::unbounded_channel();
 
-  let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
-
   let mut behaviour = Chat {
     dns: Mdns::new(MdnsConfig::default()).await.expect("unable to create mdns"),
     messager: Floodsub::new(peer_id),
     state: State {
       history: History::new(),
-      usernames: HashMap::from([(peer_id.to_string(), component_arg.to_string())]),
+      usernames: HashMap::from([(peer_id.to_string(), service_id.to_string())]),
     },
     peer_id: peer_id.to_string(),
     responder: response_sender,
@@ -169,39 +175,85 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut swarm = Swarm::new(transport, behaviour, peer_id);
   swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
+  let mut message_ready = true;
+
   loop {
     tokio::select! {
-        line = stdin.next_line() => {
-                let message: Message = Message {
-                    message_type: MessageType::Message,
-                    data: "New Message".as_bytes().to_vec(),
-                    addressee: None,
-                    source: peer_id.to_string(),
-                };
+      is_ready = delay_until_ready(message_ready) => {
+        if is_ready {
+          let msg = format!("Message from {}", &service_id);
+          let message: Message = Message {
+            message_type: MessageType::Message,
+            data: msg.as_bytes().to_vec(),
+            addressee: None,
+            source: peer_id.to_string(),
+          };
 
-                send_message(&message, &mut swarm, &topic);
+          send_message(&message, &mut swarm, &topic);
 
-                //Log Message
-                swarm
-                    .behaviour_mut()
-                    .state
-                    .history
-                    .insert(message);
-            }
-        event = swarm.select_next_some() => {
-            println!("Swarm event: {:?}", event);
-        },
-        response = response_rcv.recv() => {
-            if let Some(message) = response {
-                send_message(&message, &mut swarm, &topic);
-            }
-        },
-        event = ctrl_c() => {
-            if let Err(e) = event {
-                println!("Failed to register interrupt handler {}", e);
-            }
-            break;
+          //Log Message
+          swarm
+              .behaviour_mut()
+              .state
+              .history
+              .insert(message);
+          
+          message_ready = false;
         }
+      },
+      event = swarm.select_next_some() => {
+              //println!("Swarm event: {:?}", &event);
+
+              match event {
+                libp2p::swarm::SwarmEvent::Behaviour(_) => {
+                  println!("Behavior Event");
+                }
+                libp2p::swarm::SwarmEvent::ConnectionEstablished { peer_id, endpoint, num_established, concurrent_dial_errors } => {
+                  println!("Connection Established");
+                },
+                libp2p::swarm::SwarmEvent::ConnectionClosed { peer_id, endpoint, num_established, cause } => {
+                  println!("Connection Closed");
+                }
+                libp2p::swarm::SwarmEvent::IncomingConnection { local_addr, send_back_addr } => {
+                  println!("Incoming Connection");
+                }
+                libp2p::swarm::SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error } => {
+                  println!("Incoming Error");
+                }
+                libp2p::swarm::SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+                  println!("Outgoing Connection Error");
+                }
+                libp2p::swarm::SwarmEvent::BannedPeer { peer_id, endpoint } => {
+                  println!("Banned Peer");
+                }
+                libp2p::swarm::SwarmEvent::NewListenAddr { listener_id, address } => {
+                  println!("New Listen Addr");
+                }
+                libp2p::swarm::SwarmEvent::ExpiredListenAddr { listener_id, address } => {
+                  println!("Expired Listen Addr");
+                }
+                libp2p::swarm::SwarmEvent::ListenerClosed { listener_id, addresses, reason } => {
+                  println!("Listener Closed");
+                }
+                libp2p::swarm::SwarmEvent::ListenerError { listener_id, error } => {
+                  println!("Listener Error");
+                },
+                libp2p::swarm::SwarmEvent::Dialing(_) => {
+                  println!("Dialing");
+                }
+              }
+      },
+      response = response_rcv.recv() => {
+          if let Some(message) = response {
+              send_message(&message, &mut swarm, &topic);
+          }
+      },
+      event = ctrl_c() => {
+          if let Err(e) = event {
+              println!("Failed to register interrupt handler {}", e);
+          }
+          break;
+      }
     }
   }
 
@@ -212,4 +264,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   //swarm.select_next_some().await;
 
   process::exit(0);
+}
+
+async fn delay_until_ready(message_sent: bool) -> bool {
+  tokio::time::sleep(Duration::from_millis(500)).await;
+  message_sent
 }

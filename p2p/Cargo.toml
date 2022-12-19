@@ -16,3 +16,4 @@ log = "0.4.14"
 pretty_env_logger = "0.4"
 
 futures = "0.3.18"
+message-box = { path = "../common/message-box" }
