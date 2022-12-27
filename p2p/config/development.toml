@@ -1,0 +1,7 @@
+[coordinator1]
+address = "/ip4/172.19.72.129/tcp/45917"
+address_book = "/ip4/172.19.72.129/tcp/35237"
+
+[coordinator2]
+address = "/ip4/172.19.72.129/tcp/35237"
+address_book = "/ip4/172.19.72.129/tcp/45917"

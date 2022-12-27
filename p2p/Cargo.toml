@@ -23,3 +23,6 @@ group = "0.12"
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 zalloc = { path = "../common/zalloc" }
 rdkafka = "0.28.0"
+bs58 = "0.4.0"
+config = "0.13.1"
+clap = "2.18.0"

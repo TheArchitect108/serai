@@ -7008,6 +7008,9 @@ name = "p2p"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "bs58",
+ "clap 2.34.0",
+ "config",
  "dalek-ff-group",
  "futures",
  "group",
